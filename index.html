@@ -24,7 +24,8 @@
   }
   .sessione-box { font-size: 14px; line-height: 1.6; }
   .sessione-box b { color: #b00020; }
-  button {
+  button, a.btn {
+    display: block;
     width: 100%;
     padding: 12px;
     font-size: 16px;
@@ -32,6 +33,9 @@
     border-radius: 8px;
     margin-top: 8px;
     cursor: pointer;
+    text-align: center;
+    text-decoration: none;
+    box-sizing: border-box;
   }
   .btn-primary { background: #b00020; color: white; }
   .btn-secondary { background: #e0e0e0; color: #222; }
@@ -71,6 +75,8 @@
     <input id="inLinea" placeholder="es. 231">
     <label>Ora</label>
     <input id="inOra" placeholder="es. 05:06">
+    <label>Internal Code</label>
+    <input id="inInternalCode" placeholder="es. 2600331802">
     <button class="btn-primary" onclick="salvaSessione()">Salva sessione</button>
   </div>
 
@@ -91,11 +97,15 @@
 
   <div id="msgBox"></div>
 
+  <div class="card">
+    <a class="btn btn-secondary" href="prodotto.html">+ Aggiungi prodotto in anagrafica</a>
+  </div>
+
   <script>
     // <<< INCOLLA QUI L'URL /exec della tua web app Apps Script >>>
-    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbztk4cZ6ysMLwdJaUHhonNZpyZJePnG2glUN5ck_Yx-uaTkaZdf87SFQB6feV_MajeV5g/exec';
+    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/IL_TUO_ID_DEPLOYMENT/exec';
 
-    let sessioneCorrente = { lotto: '', linea: '', ora: '' };
+    let sessioneCorrente = { lotto: '', linea: '', ora: '', internalCode: '' };
     let ultimoProdotto = null;
     let html5QrCode = null;
 
@@ -107,13 +117,14 @@
     function aggiornaSessioneBox() {
       const box = document.getElementById('sessioneBox');
       if (!sessioneCorrente.lotto) {
-        box.innerHTML = '<b>Nessuna sessione impostata.</b><br>Imposta lotto / linea / ora prima di scansionare.';
+        box.innerHTML = '<b>Nessuna sessione impostata.</b><br>Imposta lotto / linea / ora / internal code prima di scansionare.';
       } else {
         box.innerHTML =
           'Sessione attiva:<br>' +
           '<b>Lotto:</b> ' + sessioneCorrente.lotto + '<br>' +
           '<b>Linea:</b> ' + sessioneCorrente.linea + '<br>' +
-          '<b>Ora:</b> ' + sessioneCorrente.ora;
+          '<b>Ora:</b> ' + sessioneCorrente.ora + '<br>' +
+          '<b>Internal Code:</b> ' + sessioneCorrente.internalCode;
       }
     }
 
@@ -132,16 +143,19 @@
       document.getElementById('inLotto').value = sessioneCorrente.lotto;
       document.getElementById('inLinea').value = sessioneCorrente.linea;
       document.getElementById('inOra').value = sessioneCorrente.ora;
+      document.getElementById('inInternalCode').value = sessioneCorrente.internalCode;
     }
 
     async function salvaSessione() {
       const lotto = document.getElementById('inLotto').value.trim();
       const linea = document.getElementById('inLinea').value.trim();
       const ora = document.getElementById('inOra').value.trim();
+      const internalCode = document.getElementById('inInternalCode').value.trim();
       const url = APPS_SCRIPT_URL + '?action=setSession'
         + '&lotto=' + encodeURIComponent(lotto)
         + '&linea=' + encodeURIComponent(linea)
-        + '&ora=' + encodeURIComponent(ora);
+        + '&ora=' + encodeURIComponent(ora)
+        + '&internalCode=' + encodeURIComponent(internalCode);
       try {
         const res = await fetch(url);
         sessioneCorrente = await res.json();
@@ -180,7 +194,7 @@
 
     async function gestisciBarcode(codice) {
       if (!sessioneCorrente.lotto) {
-        mostraMsg('Imposta prima lotto / linea / ora.', 'err');
+        mostraMsg('Imposta prima lotto / linea / ora / internal code.', 'err');
         return;
       }
       mostraMsg('Ricerca prodotto...', 'ok');
@@ -196,8 +210,7 @@
         document.getElementById('prodottoBox').innerHTML =
           '<b>Nome formato:</b> ' + prodotto.nomeFormato + '<br>' +
           '<b>Marchio:</b> ' + prodotto.marchio + '<br>' +
-          '<b>Cod. art.:</b> ' + prodotto.codArt + '<br>' +
-          '<b>Internal Code:</b> ' + prodotto.internalCode;
+          '<b>Cod. art.:</b> ' + prodotto.codArt;
         document.getElementById('risultato').classList.remove('hidden');
         document.getElementById('msgBox').innerHTML = '';
       } catch (err) {
@@ -211,7 +224,7 @@
         nomeFormato: ultimoProdotto.nomeFormato,
         marchio: ultimoProdotto.marchio,
         codArt: ultimoProdotto.codArt,
-        internalCode: ultimoProdotto.internalCode,
+        internalCode: sessioneCorrente.internalCode,
         lotto: sessioneCorrente.lotto,
         linea: sessioneCorrente.linea,
         ora: sessioneCorrente.ora,
