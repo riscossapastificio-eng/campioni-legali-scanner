@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aggiungi prodotto - Anagrafica</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, Roboto, Arial, sans-serif;
+    margin: 0;
+    padding: 16px;
+    background: #f4f4f4;
+    color: #222;
+  }
+  h2 { margin: 0 0 12px; font-size: 20px; }
+  .card {
+    background: white;
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  button, a.btn {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    font-size: 16px;
+    border: none;
+    border-radius: 8px;
+    margin-top: 8px;
+    cursor: pointer;
+    text-align: center;
+    text-decoration: none;
+    box-sizing: border-box;
+  }
+  .btn-primary { background: #b00020; color: white; }
+  .btn-secondary { background: #e0e0e0; color: #222; }
+  .btn-save { background: #2e7d32; color: white; }
+  input {
+    width: 100%;
+    padding: 10px;
+    font-size: 15px;
+    margin-top: 4px;
+    margin-bottom: 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+  }
+  label { font-size: 13px; color: #555; }
+  #reader { width: 100%; border-radius: 8px; overflow: hidden; }
+  .msg { font-size: 14px; padding: 10px; border-radius: 6px; margin-top: 8px; }
+  .msg.err { background: #fdecea; color: #b00020; }
+  .msg.ok { background: #e8f5e9; color: #2e7d32; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+
+  <h2>Aggiungi prodotto in anagrafica</h2>
+
+  <div class="card">
+    <button class="btn-primary" id="btnScan" onclick="avviaScanner()">Scansiona barcode prodotto</button>
+    <div id="reader" class="hidden"></div>
+  </div>
+
+  <div class="card">
+    <label>Barcode</label>
+    <input id="inBarcode" placeholder="es. 8011780009437">
+    <label>Nome formato</label>
+    <input id="inNomeFormato" placeholder="es. Cocciolette">
+    <label>Marchio</label>
+    <input id="inMarchio" placeholder="es. RISCOSSA">
+    <label>Cod. art.</label>
+    <input id="inCodArt" placeholder="es. 964">
+    <button class="btn-save" onclick="salvaProdotto()">Salva in anagrafica</button>
+  </div>
+
+  <div id="msgBox"></div>
+
+  <div class="card">
+    <a class="btn btn-secondary" href="index.html">&larr; Torna allo scanner campioni</a>
+  </div>
+
+  <script>
+    // <<< INCOLLA QUI L'URL /exec della tua web app Apps Script (stesso di index.html) >>>
+    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/IL_TUO_ID_DEPLOYMENT/exec';
+
+    let html5QrCode = null;
+
+    function mostraMsg(testo, tipo) {
+      document.getElementById('msgBox').innerHTML =
+        '<div class="msg ' + tipo + '">' + testo + '</div>';
+    }
+
+    function avviaScanner() {
+      document.getElementById('reader').classList.remove('hidden');
+      document.getElementById('btnScan').classList.add('hidden');
+      html5QrCode = new Html5Qrcode("reader");
+      html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 220 },
+        function(decodedText) {
+          fermaScanner();
+          document.getElementById('inBarcode').value = decodedText;
+        }
+      ).catch(function(err) {
+        mostraMsg('Impossibile avviare la fotocamera: ' + err, 'err');
+      });
+    }
+
+    function fermaScanner() {
+      if (html5QrCode) {
+        html5QrCode.stop().then(function() {
+          document.getElementById('reader').classList.add('hidden');
+          document.getElementById('btnScan').classList.remove('hidden');
+        }).catch(function() {});
+      }
+    }
+
+    async function salvaProdotto() {
+      const payload = {
+        barcode: document.getElementById('inBarcode').value.trim(),
+        nomeFormato: document.getElementById('inNomeFormato').value.trim(),
+        marchio: document.getElementById('inMarchio').value.trim(),
+        codArt: document.getElementById('inCodArt').value.trim()
+      };
+      if (!payload.barcode) {
+        mostraMsg('Inserisci o scansiona un barcode.', 'err');
+        return;
+      }
+      try {
+        const res = await fetch(APPS_SCRIPT_URL + '?action=addProduct', {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        });
+        const out = await res.json();
+        if (out.ok) {
+          mostraMsg(out.aggiornato ? 'Prodotto aggiornato in anagrafica.' : 'Prodotto aggiunto in anagrafica.', 'ok');
+          document.getElementById('inBarcode').value = '';
+          document.getElementById('inNomeFormato').value = '';
+          document.getElementById('inMarchio').value = '';
+          document.getElementById('inCodArt').value = '';
+        } else {
+          mostraMsg(out.errore, 'err');
+        }
+      } catch (err) {
+        mostraMsg('Errore salvataggio prodotto: ' + err, 'err');
+      }
+    }
+  </script>
+</body>
+</html>
