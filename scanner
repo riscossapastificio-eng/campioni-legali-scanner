@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scanner Campioni Legali</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, Roboto, Arial, sans-serif;
+    margin: 0;
+    padding: 16px;
+    background: #f4f4f4;
+    color: #222;
+  }
+  h2 { margin: 0 0 12px; font-size: 20px; }
+  .card {
+    background: white;
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  .sessione-box { font-size: 14px; line-height: 1.6; }
+  .sessione-box b { color: #b00020; }
+  button {
+    width: 100%;
+    padding: 12px;
+    font-size: 16px;
+    border: none;
+    border-radius: 8px;
+    margin-top: 8px;
+    cursor: pointer;
+  }
+  .btn-primary { background: #b00020; color: white; }
+  .btn-secondary { background: #e0e0e0; color: #222; }
+  .btn-save { background: #2e7d32; color: white; }
+  input {
+    width: 100%;
+    padding: 10px;
+    font-size: 15px;
+    margin-top: 4px;
+    margin-bottom: 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+  }
+  label { font-size: 13px; color: #555; }
+  #reader { width: 100%; border-radius: 8px; overflow: hidden; }
+  .prodotto-box { font-size: 15px; line-height: 1.7; }
+  .prodotto-box b { display: inline-block; min-width: 120px; }
+  .msg { font-size: 14px; padding: 10px; border-radius: 6px; margin-top: 8px; }
+  .msg.err { background: #fdecea; color: #b00020; }
+  .msg.ok { background: #e8f5e9; color: #2e7d32; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+
+  <h2>Scanner Campioni Legali</h2>
+
+  <div class="card">
+    <div class="sessione-box" id="sessioneBox">Caricamento sessione...</div>
+    <button class="btn-secondary" onclick="mostraFormSessione()">Imposta nuovo lotto / turno</button>
+  </div>
+
+  <div class="card hidden" id="formSessione">
+    <label>Lotto</label>
+    <input id="inLotto" placeholder="es. L18826">
+    <label>Linea. Conf.</label>
+    <input id="inLinea" placeholder="es. 231">
+    <label>Ora</label>
+    <input id="inOra" placeholder="es. 05:06">
+    <button class="btn-primary" onclick="salvaSessione()">Salva sessione</button>
+  </div>
+
+  <div class="card">
+    <button class="btn-primary" id="btnScan" onclick="avviaScanner()">Scansiona barcode</button>
+    <div id="reader" class="hidden"></div>
+  </div>
+
+  <div class="card hidden" id="risultato">
+    <div class="prodotto-box" id="prodottoBox"></div>
+    <label>N. campioni</label>
+    <input id="inCampioni" type="number" value="1" min="1">
+    <label>Note</label>
+    <input id="inNote" placeholder="(opzionale)">
+    <button class="btn-save" onclick="salvaCampione()">Salva campione</button>
+    <button class="btn-secondary" onclick="resetScan()">Annulla / nuova scansione</button>
+  </div>
+
+  <div id="msgBox"></div>
+
+  <script>
+    // <<< INCOLLA QUI L'URL /exec della tua web app Apps Script >>>
+    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbztk4cZ6ysMLwdJaUHhonNZpyZJePnG2glUN5ck_Yx-uaTkaZdf87SFQB6feV_MajeV5g/exec';
+
+    let sessioneCorrente = { lotto: '', linea: '', ora: '' };
+    let ultimoProdotto = null;
+    let html5QrCode = null;
+
+    function mostraMsg(testo, tipo) {
+      document.getElementById('msgBox').innerHTML =
+        '<div class="msg ' + tipo + '">' + testo + '</div>';
+    }
+
+    function aggiornaSessioneBox() {
+      const box = document.getElementById('sessioneBox');
+      if (!sessioneCorrente.lotto) {
+        box.innerHTML = '<b>Nessuna sessione impostata.</b><br>Imposta lotto / linea / ora prima di scansionare.';
+      } else {
+        box.innerHTML =
+          'Sessione attiva:<br>' +
+          '<b>Lotto:</b> ' + sessioneCorrente.lotto + '<br>' +
+          '<b>Linea:</b> ' + sessioneCorrente.linea + '<br>' +
+          '<b>Ora:</b> ' + sessioneCorrente.ora;
+      }
+    }
+
+    async function caricaSessione() {
+      try {
+        const res = await fetch(APPS_SCRIPT_URL + '?action=session');
+        sessioneCorrente = await res.json();
+        aggiornaSessioneBox();
+      } catch (err) {
+        mostraMsg('Errore di connessione al backend: ' + err, 'err');
+      }
+    }
+
+    function mostraFormSessione() {
+      document.getElementById('formSessione').classList.remove('hidden');
+      document.getElementById('inLotto').value = sessioneCorrente.lotto;
+      document.getElementById('inLinea').value = sessioneCorrente.linea;
+      document.getElementById('inOra').value = sessioneCorrente.ora;
+    }
+
+    async function salvaSessione() {
+      const lotto = document.getElementById('inLotto').value.trim();
+      const linea = document.getElementById('inLinea').value.trim();
+      const ora = document.getElementById('inOra').value.trim();
+      const url = APPS_SCRIPT_URL + '?action=setSession'
+        + '&lotto=' + encodeURIComponent(lotto)
+        + '&linea=' + encodeURIComponent(linea)
+        + '&ora=' + encodeURIComponent(ora);
+      try {
+        const res = await fetch(url);
+        sessioneCorrente = await res.json();
+        aggiornaSessioneBox();
+        document.getElementById('formSessione').classList.add('hidden');
+        mostraMsg('Sessione aggiornata.', 'ok');
+      } catch (err) {
+        mostraMsg('Errore salvataggio sessione: ' + err, 'err');
+      }
+    }
+
+    function avviaScanner() {
+      document.getElementById('reader').classList.remove('hidden');
+      document.getElementById('btnScan').classList.add('hidden');
+      html5QrCode = new Html5Qrcode("reader");
+      html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 220 },
+        function(decodedText) {
+          fermaScanner();
+          gestisciBarcode(decodedText);
+        }
+      ).catch(function(err) {
+        mostraMsg('Impossibile avviare la fotocamera: ' + err, 'err');
+      });
+    }
+
+    function fermaScanner() {
+      if (html5QrCode) {
+        html5QrCode.stop().then(function() {
+          document.getElementById('reader').classList.add('hidden');
+          document.getElementById('btnScan').classList.remove('hidden');
+        }).catch(function() {});
+      }
+    }
+
+    async function gestisciBarcode(codice) {
+      if (!sessioneCorrente.lotto) {
+        mostraMsg('Imposta prima lotto / linea / ora.', 'err');
+        return;
+      }
+      mostraMsg('Ricerca prodotto...', 'ok');
+      try {
+        const res = await fetch(APPS_SCRIPT_URL + '?action=lookup&barcode=' + encodeURIComponent(codice));
+        const prodotto = await res.json();
+        if (!prodotto.trovato) {
+          mostraMsg(prodotto.errore, 'err');
+          return;
+        }
+        ultimoProdotto = prodotto;
+        ultimoProdotto.barcode = codice;
+        document.getElementById('prodottoBox').innerHTML =
+          '<b>Nome formato:</b> ' + prodotto.nomeFormato + '<br>' +
+          '<b>Marchio:</b> ' + prodotto.marchio + '<br>' +
+          '<b>Cod. art.:</b> ' + prodotto.codArt + '<br>' +
+          '<b>Internal Code:</b> ' + prodotto.internalCode;
+        document.getElementById('risultato').classList.remove('hidden');
+        document.getElementById('msgBox').innerHTML = '';
+      } catch (err) {
+        mostraMsg('Errore ricerca prodotto: ' + err, 'err');
+      }
+    }
+
+    async function salvaCampione() {
+      if (!ultimoProdotto) return;
+      const payload = {
+        nomeFormato: ultimoProdotto.nomeFormato,
+        marchio: ultimoProdotto.marchio,
+        codArt: ultimoProdotto.codArt,
+        internalCode: ultimoProdotto.internalCode,
+        lotto: sessioneCorrente.lotto,
+        linea: sessioneCorrente.linea,
+        ora: sessioneCorrente.ora,
+        nCampioni: document.getElementById('inCampioni').value,
+        note: document.getElementById('inNote').value
+      };
+      try {
+        const res = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        });
+        const out = await res.json();
+        if (out.ok) {
+          mostraMsg('Campione salvato.', 'ok');
+          resetScan();
+        } else {
+          mostraMsg(out.errore, 'err');
+        }
+      } catch (err) {
+        mostraMsg('Errore salvataggio campione: ' + err, 'err');
+      }
+    }
+
+    function resetScan() {
+      ultimoProdotto = null;
+      document.getElementById('risultato').classList.add('hidden');
+      document.getElementById('inCampioni').value = 1;
+      document.getElementById('inNote').value = '';
+    }
+
+    caricaSessione();
+  </script>
+</body>
+</html>
